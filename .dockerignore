@@ -1,0 +1,46 @@
+# VCS
+.git
+.gitignore
+
+# Python junk
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.dylib
+*.egg-info/
+.eggs/
+
+# Builds & logs
+dist/
+build/
+*.log
+
+# Venv
+.venv
+venv
+
+# Env (секреты)
+.env
+.env.*
+
+# IDE/OS
+.DS_Store
+.idea
+.vscode
+
+# Caches
+.mypy_cache
+.pytest_cache
+.cache
+
+# Local data
+*.sqlite3
+data/
+secrets.*
+
+# Not needed in image
+tests
+docs
+docker-compose.yml
