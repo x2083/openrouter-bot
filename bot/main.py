@@ -30,6 +30,8 @@ else:
     logging.info("LLM provider: OpenRouter (%s)", current_model)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Очищаем историю контекста при перезапуске команды /start
+    context.user_data["history"] = []
     await update.message.reply_text("Привет! Я ИИ-бот. Напиши вопрос — отвечу.")
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -39,18 +41,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = (update.message.text or "").strip()
     if not user_text:
         return await update.message.reply_text("Отправь обычный текстовый вопрос.")
+
+    # Достаем или инициализируем историю сообщений пользователя
+    history = context.user_data.setdefault("history", [])
+
+    # Добавляем текущее сообщение пользователя в историю
+    history.append({"role": "user", "content": user_text})
+
     # «печатает…»
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     try:
+        # Передаем обновленную историю или тексты в метод chat
+        # Примечание: Убедитесь, что метод llm_client.chat поддерживает историю/массив сообщений
         reply = await llm_client.chat(
             model=current_model,
-            user_text=user_text,
+            user_text=history,
             system_prompt=settings.system_prompt,
             max_tokens=settings.max_tokens,
             temperature=settings.temperature,
         )
+        # Добавляем ответ модели в историю
+        history.append({"role": "assistant", "content": reply})
         await update.message.reply_text(reply)
     except Exception as e:
+        # В случае ошибки удаляем последнее неотправленное сообщение пользователя, чтобы не ломать цепочку
+        if history and history[-1]["role"] == "user":
+            history.pop()
         logging.exception("LLM request failed")
         await update.message.reply_text(f"Ошибка запроса к модели: {e}")
 
