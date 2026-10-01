@@ -30,7 +30,7 @@ else:
     logging.info("LLM provider: OpenRouter (%s)", current_model)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Очищаем историю контекста при перезапуске команды /start
+    # Очищаем историю при вызове /start
     context.user_data["history"] = []
     await update.message.reply_text("Привет! Я ИИ-бот. Напиши вопрос — отвечу.")
 
@@ -42,30 +42,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_text:
         return await update.message.reply_text("Отправь обычный текстовый вопрос.")
 
-    # Достаем или инициализируем историю сообщений пользователя
+    # Достаем или инициализируем историю
     history = context.user_data.setdefault("history", [])
 
-    # Добавляем текущее сообщение пользователя в историю
-    history.append({"role": "user", "content": user_text})
+    # Ограничиваем историю (например, последние 10 сообщений), чтобы не переполнять контекст
+    if len(history) > 10:
+        history = history[-10:]
+        context.user_data["history"] = history
+
+    # Добавляем новое сообщение пользователя
+    history.append({"role": "User", "content": user_text})
+
+    # Собираем историю диалога в ЕДИНУЮ СТРОКУ для передачи в user_text
+    prompt_with_context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
 
     # «печатает…»
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     try:
-        # Передаем обновленную историю или тексты в метод chat
-        # Примечание: Убедитесь, что метод llm_client.chat поддерживает историю/массив сообщений
+        # Передаем строковый prompt_with_context, который ожидает llm_client
         reply = await llm_client.chat(
             model=current_model,
-            user_text=history,
+            user_text=prompt_with_context,
             system_prompt=settings.system_prompt,
             max_tokens=settings.max_tokens,
             temperature=settings.temperature,
         )
-        # Добавляем ответ модели в историю
-        history.append({"role": "assistant", "content": reply})
+        
+        # Сохраняем ответ модели в историю
+        history.append({"role": "Assistant", "content": reply})
         await update.message.reply_text(reply)
+        
     except Exception as e:
-        # В случае ошибки удаляем последнее неотправленное сообщение пользователя, чтобы не ломать цепочку
-        if history and history[-1]["role"] == "user":
+        # В случае ошибки откатываем последнее сообщение
+        if history and history[-1]["role"] == "User":
             history.pop()
         logging.exception("LLM request failed")
         await update.message.reply_text(f"Ошибка запроса к модели: {e}")
